@@ -1,1 +1,3 @@
 # Sistem-anti-distragre-arduino
+
+Proiectul propune un timer Pomodoro (25 minute de concentrare, 5 minute de pauza) conceput pentru a forta utilizatorul sa nu foloseasca telefonul mobil in timpul sesiunii de lucru. Proiectul consta in rezolvarea unei probleme reale si frecvente (distragerea atentiei prin telefon), oferind o interactiune fizica utila. In alcatuirea proiectului se regasesc: o placa de dezvoltare Arduino, un modul senzor de evitare a obstacolelor cu infra rosu pentru a detecta prezenta telefonului, un display LCD cu modul I2C pentru afisarea timpului, un buzzer pentru alarme si un buton pentru pornire sau resetare.
