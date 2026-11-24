@@ -5,12 +5,14 @@
 #define PIN_FSR A0
 #define PIN_LED_ROSU 4
 #define PIN_LED_VERDE 5
+#define PIN_BUZZER 6
 
 hd44780_I2Cexp lcd;
 
 int valoareZero = 0; //tara, cand nu se apasa pe senzor
 float grameFiltrate = 0;
 float factorCalibrare = 1.0; 
+bool telefonAFostPus = false;
 
 // praguri de sensibilitatea alese prin test in serial-monitor
 const int PRAG_USOR = 15; // sub 15 - nu avem apasare
@@ -37,6 +39,10 @@ void setup() {
   //setam pinii de la led ca iesiri
   pinMode(PIN_LED_ROSU, OUTPUT);
   pinMode(PIN_LED_VERDE, OUTPUT);
+
+  //pinul de la buzzer setat ca iesire
+  pinMode(PIN_BUZZER, OUTPUT);
+  digitalWrite(PIN_BUZZER, LOW);
   
   lcd.begin(16, 2);
   
@@ -57,7 +63,7 @@ void loop() {
   int citireBruta = citesteMedie(15) - valoareZero; //citestemedia a 15 esantionari si scadem val 0 pt a obtine doar forta
   
   //eliminam val zgomot
-  if (citireBruta <= 2) {
+  if (citireBruta < 0) {
     citireBruta = 0; 
   }
   
@@ -70,6 +76,8 @@ void loop() {
   if (grameFiltrate < 1.5) {
     grameFiltrate = 0;
   }
+
+  Serial.println(grameFiltrate);
 
   // nivelul de apasare prezent
   int nivelCurent = 0;
@@ -89,25 +97,33 @@ void loop() {
     lcd.setCursor(0, 1);
 
     if (nivelCurent == 0) {
-      lcd.print("Nicio apasare   ");
       digitalWrite(PIN_LED_ROSU, HIGH);
       digitalWrite(PIN_LED_VERDE, LOW);
-    } 
-    else if (nivelCurent == 1) {
-      lcd.print("USOR            ");
-      digitalWrite(PIN_LED_ROSU, LOW);
-      digitalWrite(PIN_LED_VERDE, HIGH);
-    } 
-    else if (nivelCurent == 2) {
-      lcd.print("MEDIU           ");
-      digitalWrite(PIN_LED_ROSU, LOW);
-      digitalWrite(PIN_LED_VERDE, HIGH);
-    } 
-    else if (nivelCurent == 3) {
-      lcd.print("FOARTE TARE!    ");
-      // aprindem anadoua leduri pt avertizare
-      digitalWrite(PIN_LED_ROSU, HIGH); 
-      digitalWrite(PIN_LED_VERDE, HIGH);
+
+      if (telefonAFostPus == true) {
+        lcd.print("PUNE TELEFONUL!!!");
+        tone(PIN_BUZZER, 250);
+      } else {
+        lcd.print("Nicio apasare ");
+      }
+    } else {
+      telefonAFostPus = true;
+      noTone(PIN_BUZZER);
+
+      if (nivelCurent == 1) {
+        lcd.print("USOR");
+        digitalWrite(PIN_LED_ROSU, LOW);
+        digitalWrite(PIN_LED_VERDE, HIGH);
+      } else if (nivelCurent == 2) {
+          lcd.print("MEDIU");
+          digitalWrite(PIN_LED_ROSU, LOW);
+          digitalWrite(PIN_LED_VERDE, HIGH);
+      } else if (nivelCurent == 3) {
+          lcd.print("FOARTE TARE!");
+          // aprindem anadoua leduri pt avertizare
+          digitalWrite(PIN_LED_ROSU, HIGH); 
+          digitalWrite(PIN_LED_VERDE, HIGH);
+      }
     }
   }
 
