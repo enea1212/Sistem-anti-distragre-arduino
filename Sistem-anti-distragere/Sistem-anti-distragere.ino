@@ -44,6 +44,11 @@ const unsigned long PRAG_FOARTE_LUNG_MS = 3000; // apasare foarte lunga: abandon
 
 enum EvButon { EV_NIMIC, EV_SCURT, EV_LUNG, EV_FOARTE_LUNG };
 
+// ================= ALARMA (timp de gratie + alarma progresiva) =================
+const unsigned long GRATIE_MS = 3000; // timp de gratie dupa ridicarea telefonului, fara sunet
+const unsigned long FAZA1_MS = 5000;  // primele 5 s de alarma: bipuri rare (1 pe secunda)
+const unsigned long FAZA2_MS = 10000; // pana la 10 s: bipuri dese (la 300 ms), apoi sunet continuu
+
 bool ultimaCitireButon = false;
 bool butonStabil = false;
 unsigned long momentSchimbareButon = 0;
@@ -63,7 +68,9 @@ unsigned long timpRamasMs = 0;    // cat mai e din faza curenta
 unsigned long ultimulMillis = 0;  // pt a calcula cat timp a trecut intre doua loop-uri
 long ultimaSecundaAfisata = -1;   // timerul se rescrie pe LCD doar o data pe secunda
 int stareAnterioara = -1;         // ultima stare afisata
-bool telefonAnterior = false;     // pt a detecta momentul in care telefonul e ridicat
+unsigned long momentRidicare = 0; // cand a fost ridicat telefonul (intrarea in starea 3)
+int ultimaSecundaGratie = -1;     // countdown-ul afisat in timpul de gratie (0 = alarma pornita)
+long ultimulPasAlarma = -1;       // ultimul bip emis (ca fiecare bip sa sune o singura data)
 unsigned long studiuNesalvatMs = 0;
 
 // ================= STATISTICI (EEPROM) =================
@@ -74,7 +81,7 @@ struct Statistici {
   uint16_t magic;
   uint16_t terminate;     // sesiuni (intervale de lucru) duse pana la capat
   uint16_t abandonate;    // sesiuni oprite cu apasare foarte lunga
-  uint16_t ridicari;      // de cate ori a fost ridicat telefonul in timpul lucrului
+  uint16_t ridicari;      // de cate ori a fost ridicat telefonul peste timpul de gratie
   uint32_t secundeStudiu; // timp total de studiu cu telefonul pe senzor
 };
 Statistici stat;
@@ -398,10 +405,6 @@ void loop() {
         if (timpRamasMs == 0) {
           finalLucru();
         }
-      } else if (telefonAnterior) {
-        // telefonul tocmai a fost ridicat
-        stat.ridicari++;
-        salveazaStatistici();
       }
       break;
 
@@ -428,8 +431,6 @@ void loop() {
       }
       break;
   }
-
-  telefonAnterior = telefonPrezent;
 
   int stareCurenta = 0;
   if (faza == FAZA_NIMIC) {
@@ -486,11 +487,14 @@ void loop() {
       noTone(PIN_BUZZER);
     }
     else if (stareCurenta == 3) {
-      //starea 3 - telefon ridicat inainte de finalul timerului, activam buzzer
-      scrieRand(1, "PUNE-L LA LOC!");
+      //starea 3 - telefon ridicat inainte de finalul timerului
+      //incepe timpul de gratie; alarma propriu-zisa e tratata mai jos, in functie de timp
+      momentRidicare = acum;
+      ultimaSecundaGratie = -1;
+      ultimulPasAlarma = -1;
       digitalWrite(PIN_LED_ROSU, HIGH);
       digitalWrite(PIN_LED_VERDE, LOW);
-      tone(PIN_BUZZER, 250);
+      noTone(PIN_BUZZER);
     }
     else if (stareCurenta == 4) {
       //starea 4 - timerul a expirat, sesiune incheiata
@@ -515,6 +519,55 @@ void loop() {
     if (secundaCurenta != ultimaSecundaAfisata) {
       ultimaSecundaAfisata = secundaCurenta;
       afiseazaTimerSiBara();
+    }
+  }
+
+  // timp de gratie + alarma progresiva (idee preluata din branch-ul feature-grace-alarma-buton)
+  if (stareCurenta == 3) {
+    unsigned long scurs = acum - momentRidicare;
+
+    if (scurs < GRATIE_MS) {
+      // timp de gratie: fara sunet, doar numaratoare inversa 3, 2, 1
+      int secunde = (int)((GRATIE_MS - scurs + 999) / 1000);
+      if (secunde != ultimaSecundaGratie) {
+        ultimaSecundaGratie = secunde;
+        char buf[17];
+        snprintf(buf, sizeof(buf), "Pune-l la loc %d", secunde);
+        scrieRand(1, buf);
+      }
+    } else {
+      unsigned long t = scurs - GRATIE_MS; // timp de la pornirea alarmei
+
+      if (ultimaSecundaGratie != 0) {
+        // gratia a expirat -> alarma porneste; abia acum numaram ridicarea in statistici
+        ultimaSecundaGratie = 0;
+        scrieRand(1, "PUNE-L LA LOC!");
+        stat.ridicari++;
+        salveazaStatistici();
+      }
+
+      if (t < FAZA1_MS) {
+        // faza 1: bip de 100 ms la fiecare secunda
+        long pas = t / 1000;
+        if (pas != ultimulPasAlarma) {
+          ultimulPasAlarma = pas;
+          tone(PIN_BUZZER, 250, 100);
+        }
+      } else if (t < FAZA2_MS) {
+        // faza 2: bip de 100 ms la fiecare 300 ms
+        long pas = 1000 + (long)((t - FAZA1_MS) / 300);
+        if (pas != ultimulPasAlarma) {
+          ultimulPasAlarma = pas;
+          tone(PIN_BUZZER, 250, 100);
+        }
+      } else {
+        // faza 3: sunet continuu + LED rosu care clipeste
+        if (ultimulPasAlarma != -2) {
+          ultimulPasAlarma = -2;
+          tone(PIN_BUZZER, 250);
+        }
+        digitalWrite(PIN_LED_ROSU, ((t / 200) % 2) == 0 ? HIGH : LOW);
+      }
     }
   }
 

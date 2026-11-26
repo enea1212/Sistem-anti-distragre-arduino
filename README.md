@@ -64,7 +64,7 @@ Butonul folosește **rezistorul intern de pull-up** al plăcii (`INPUT_PULLUP`),
 2. Utilizatorul **alege durata** sesiunii cu apăsări scurte pe buton (15 / 25 / 45 / 60 de minute sau Pomodoro).
 3. Utilizatorul **pune telefonul pe senzor** și **apasă butonul** → sesiunea pornește.
 4. Cât timp telefonul stă pe senzor, **timerul numără descrescător**, iar pe LCD apar timpul rămas și o bară de progres.
-5. Dacă telefonul este **ridicat înainte de final**, pornesc **alarma** (buzzer + LED roșu) și **timerul se oprește**. Când telefonul este pus la loc, alarma se oprește, iar timerul continuă de unde a rămas.
+5. Dacă telefonul este **ridicat înainte de final**, **timerul se oprește** și începe un **timp de grație de 3 secunde**. Dacă telefonul nu este pus la loc în acest timp, pornește o **alarmă progresivă** (bipuri rare, apoi dese, apoi sunet continuu). Când telefonul este pus la loc, alarma se oprește, iar timerul continuă de unde a rămas.
 6. Când timerul ajunge la zero, se aud **3 bipuri**, iar telefonul poate fi luat fără alarmă.
 7. Fiecare eveniment important (sesiune terminată, sesiune abandonată, telefon ridicat, timp studiat) este **salvat în EEPROM**.
 
@@ -77,7 +77,7 @@ Programul este construit ca o **mașină de stări**. Logica internă folosește
 | 0 | fără telefon, fără sesiune | durata aleasă / „Pune telefonul!” | aprins | stins | oprit |
 | 1 | telefon pus, sesiune nepornită | durata aleasă / „Apasa START” | stins | aprins | oprit |
 | 2 | sesiune activă, telefon pe senzor | timp + bară / „Sesiune activa” sau „Lucru 2/4” | stins | aprins (clipește în ultimul minut) | oprit |
-| 3 | sesiune activă, telefon ridicat | timp + bară / „PUNE-L LA LOC!” | aprins | stins | ton continuu 250 Hz |
+| 3 | sesiune activă, telefon ridicat | timp + bară / „Pune-l la loc 3…1”, apoi „PUNE-L LA LOC!” | aprins (clipește în faza finală) | stins | 3 s liniște, apoi alarmă progresivă (vezi secțiunea 10) |
 | 4 | timer terminat, telefonul poate fi luat | „Sesiune gata!” / „Poti lua telef.” | stins | aprins | 3 bipuri |
 | 5 | pauză Pomodoro | timp + bară / „Pauza” sau „Pauza lunga” | stins | stins | oprit |
 
@@ -174,12 +174,19 @@ Tehnica Pomodoro alternează intervale de lucru concentrat cu pauze scurte:
 
 ## 10. Alarma
 
-Alarma pornește când telefonul este ridicat în timpul fazei de lucru:
+Când telefonul este ridicat în timpul fazei de lucru, timerul se oprește, iar sistemul trece prin următoarele etape (timpul se măsoară de la ridicarea telefonului):
 
-- buzzer: ton continuu de 250 Hz,
-- LED roșu aprins, LED verde stins,
-- LCD: „PUNE-L LA LOC!”, iar timerul rămâne pe loc,
-- contorul de ridicări din statistici crește cu 1 (o singură dată pentru fiecare ridicare).
+| Etapă | Interval | Buzzer | LED roșu | LCD rândul 1 |
+|---|---|---|---|---|
+| Timp de grație | 0 – 3 s | liniște | aprins | „Pune-l la loc 3”, „… 2”, „… 1” |
+| Alarmă – faza 1 | 3 – 8 s | bip de 100 ms la fiecare secundă | aprins | „PUNE-L LA LOC!” |
+| Alarmă – faza 2 | 8 – 13 s | bip de 100 ms la fiecare 300 ms | aprins | „PUNE-L LA LOC!” |
+| Alarmă – faza 3 | după 13 s | ton continuu de 250 Hz | clipește (200 ms) | „PUNE-L LA LOC!” |
+
+- **Timpul de grație** permite ajustarea poziției telefonului fără să pornească alarma. Dacă telefonul este pus la loc în primele 3 secunde, sesiunea continuă normal și ridicarea **nu** se numără în statistici.
+- **Alarma progresivă** semnalează întâi discret, apoi tot mai insistent.
+- Contorul de ridicări din statistici crește cu 1 în momentul în care expiră timpul de grație (o singură dată pentru fiecare ridicare).
+- Fiecare bip este pornit o singură dată, cu `tone(pin, frecvență, durată)`, la începutul intervalului său. Astfel durata bipului nu depinde de cât durează o trecere prin `loop()`.
 
 Alarma se oprește când telefonul este pus la loc sau când sesiunea este abandonată (buton ținut 3 s).
 
@@ -192,7 +199,7 @@ struct Statistici {
   uint16_t magic;         // valoare de control (0x5A17)
   uint16_t terminate;     // sesiuni (intervale de lucru) duse până la capăt
   uint16_t abandonate;    // sesiuni anulate cu butonul ținut 3 s
-  uint16_t ridicari;      // de câte ori a fost ridicat telefonul în timpul lucrului
+  uint16_t ridicari;      // de câte ori a fost ridicat telefonul peste timpul de grație
   uint32_t secundeStudiu; // timp total de studiu cu telefonul pe senzor
 };
 ```
@@ -236,7 +243,8 @@ pixeli_umpluți = timp_scurs × 50 / durata_totală
 | LED verde aprins | telefon prezent / sesiune activă / sesiune terminată |
 | LED verde clipind (500 ms) | ultimul minut al intervalului de lucru |
 | ambele LED-uri stinse | pauză Pomodoro |
-| ton continuu 250 Hz | alarmă: telefonul a fost ridicat |
+| bipuri rare → bipuri dese → ton continuu 250 Hz | alarmă progresivă: telefonul a fost ridicat de peste 3 s |
+| LED roșu clipind (200 ms) | faza finală a alarmei |
 | 3 bipuri de 1000 Hz | finalul unei faze (lucru sau pauză) |
 | sunet grav scurt (150 Hz) | sesiune abandonată |
 
@@ -275,6 +283,9 @@ Cu `MOD_TEST = true`, toate duratele sunt interpretate în **secunde** în loc d
 | `DEBOUNCE_MS` | 30 | timpul de stabilizare a butonului (ms) |
 | `PRAG_LUNG_MS` | 1000 | pragul pentru apăsarea lungă (ms) |
 | `PRAG_FOARTE_LUNG_MS` | 3000 | pragul pentru apăsarea foarte lungă / abandon (ms) |
+| `GRATIE_MS` | 3000 | timpul de grație după ridicarea telefonului (ms) |
+| `FAZA1_MS` | 5000 | durata fazei cu bipuri rare a alarmei (ms) |
+| `FAZA2_MS` | 10000 | momentul (de la pornirea alarmei) după care sunetul devine continuu (ms) |
 | `MOD_TEST` | false | `true` = duratele sunt în secunde (pentru teste) |
 
 ## 17. Etapele dezvoltării
@@ -294,12 +305,11 @@ Cu `MOD_TEST = true`, toate duratele sunt interpretate în **secunde** în loc d
    - bara de progres pe LCD cu caractere personalizate,
    - LED-ul verde clipește în ultimul minut,
    - modul de test (durate în secunde).
+8. **Timp de grație și alarmă progresivă** – dezvoltate pe branch-ul `feature-grace-alarma-buton` și integrate în versiunea finală: 3 secunde de grație cu numărătoare inversă, apoi alarmă în trei faze (bipuri rare, bipuri dese, sunet continuu cu LED roșu intermitent).
 
 ## 18. Limitări și dezvoltări viitoare
 
 - **Calibrare în grame reale**: cu o greutate cunoscută s-ar putea determina `factorCalibrare`, iar sistemul ar putea cere o greutate minimă, ca să nu poată fi păcălit cu alt obiect pus pe senzor în locul telefonului.
 - **Detectarea înlocuirii telefonului**: memorarea greutății la START și declanșarea alarmei la o schimbare bruscă a acesteia.
-- **Timp de grație** de câteva secunde înainte de alarmă, pentru ajustarea poziției telefonului.
-- **Alarmă progresivă**: bipuri din ce în ce mai dese înainte de tonul continuu.
 - **Comunicare externă**: un modul Bluetooth (HC-05) sau o aplicație pe PC care să citească statisticile pe portul serial și să facă grafice.
 - **Modul RTC** pentru data și ora reală a sesiunilor.
