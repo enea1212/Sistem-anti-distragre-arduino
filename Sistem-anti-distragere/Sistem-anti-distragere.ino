@@ -389,6 +389,12 @@ void loop() {
         //fara telefon pe senzor: apasarile scurte schimba durata
         optiuneDurata = (optiuneDurata + 1) % NR_OPTIUNI;
         stareAnterioara = -1; // redesenam durata aleasa
+      } else if (ev == EV_FOARTE_LUNG) {
+        //fara telefon pe senzor: buton tinut 3 s -> meniul de statistici
+        modStatistici();
+        lcd.clear();
+        stareAnterioara = -1;      // redesenam ecranul de start
+        ultimulMillis = millis();  // timpul petrecut in meniu nu conteaza
       }
       break;
 

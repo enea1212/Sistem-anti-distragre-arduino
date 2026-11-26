@@ -133,7 +133,7 @@ Ce face butonul în fiecare situație:
 
 | Situație | Acțiune |
 |---|---|
-| fără telefon pe senzor | apăsare scurtă → următoarea durată (15 → 25 → 45 → 60 → Pomodoro → 15 …) |
+| fără telefon pe senzor | apăsare scurtă → următoarea durată (15 → 25 → 45 → 60 → Pomodoro → 15 …); ținut 3 s → meniul de statistici |
 | telefon pe senzor, sesiune nepornită | apăsare → **sesiunea pornește imediat** |
 | sesiune activă sau alarmă | ținut 3 s → **abandonarea sesiunii** |
 | pauză Pomodoro | ținut 3 s → oprirea ciclului Pomodoro |
@@ -208,7 +208,12 @@ struct Statistici {
 - **Salvarea** se face cu `EEPROM.put()`, care scrie doar octeții modificați. Asta contează pentru că EEPROM-ul are un număr limitat de scrieri (aproximativ 100 000 pe celulă). Scrierea se face doar la evenimente (sesiune terminată, abandonată, telefon ridicat), nu continuu.
 - **Timpul de studiu** se acumulează în milisecunde într-o variabilă din RAM și se mută în EEPROM, în secunde întregi, la finalul sau la abandonarea unei sesiuni.
 
-**Vizualizarea statisticilor:** se ține butonul apăsat în momentul alimentării plăcii (sau la apăsarea butonului RESET). Ecranul are 3 pagini:
+**Vizualizarea statisticilor** se poate face în două moduri:
+
+- **fără telefon pe senzor** (ecranul „Pune telefonul!”), se ține butonul apăsat 3 secunde;
+- sau se ține butonul apăsat în momentul alimentării plăcii (ori în timp ce se apasă butonul RESET).
+
+Ecranul are 3 pagini:
 
 | Pagina | Rândul 0 | Rândul 1 |
 |---|---|---|
@@ -267,7 +272,7 @@ Cu `MOD_TEST = true`, toate duratele sunt interpretate în **secunde** în loc d
 5. Lasă telefonul pe senzor până la final. Dacă îl ridici, pornește alarma până îl pui la loc.
 6. La final se aud 3 bipuri și apare „Sesiune gata!”. Acum poți lua telefonul.
 7. **Anulare**: ține butonul apăsat 3 s în timpul sesiunii.
-8. **Statistici**: ține butonul apăsat în timp ce alimentezi placa. Navighezi cu apăsări scurte și ieși ținând butonul 1–3 s.
+8. **Statistici**: fără telefon pe senzor, ține butonul apăsat 3 s (sau ține-l apăsat în timp ce alimentezi placa). Navighezi cu apăsări scurte și ieși ținând butonul 1–3 s.
 
 ## 16. Parametri configurabili
 
@@ -301,7 +306,7 @@ Cu `MOD_TEST = true`, toate duratele sunt interpretate în **secunde** în loc d
    - modul Pomodoro (25 / 5 min, pauză lungă de 15 min după 4 cicluri),
    - debounce și detectarea apăsărilor scurte, lungi și foarte lungi,
    - anularea sesiunii prin ținerea butonului apăsat 3 s,
-   - statistici salvate în EEPROM, vizibile la pornire,
+   - statistici salvate în EEPROM, vizibile din meniul deschis cu butonul ținut 3 s,
    - bara de progres pe LCD cu caractere personalizate,
    - LED-ul verde clipește în ultimul minut,
    - modul de test (durate în secunde).
